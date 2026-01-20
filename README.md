@@ -19,7 +19,11 @@
 
 </div>
 
-# 🔎 GPT Researcher
+# 🔎 GPT Researcher Tomorrow
+
+> **Note**: This is a fork of the original [GPT Researcher](https://github.com/assafelovic/gpt-researcher) project by [Assaf Elovic](https://github.com/assafelovic). All credit for the original work goes to the original author and contributors.
+
+---
 
 **GPT Researcher is an open deep research agent designed for both web and local research on any given task.** 
 
@@ -118,7 +122,7 @@ For other setups (e.g., Poetry or virtual environments), check the [Getting Star
 
 ## Run as PIP package
 ```bash
-pip install gpt-researcher
+pip install gpt-researcher-tomorrow
 
 ```
 ### Example Usage:

@@ -1,10 +1,12 @@
 [tool.poetry]
-name = "gpt-researcher"
-version = "0.14.5"
-description = "GPT Researcher is an autonomous agent designed for comprehensive online research on a variety of tasks."
-authors = ["Assaf Elovic <assaf.elovic@gmail.com>"]
+name = "gpt-researcher-tomorrow"
+version = "0.1.0"
+description = "GPT Researcher Tomorrow - A fork of GPT Researcher, an autonomous agent for comprehensive online research on a variety of tasks."
+authors = ["maowei <kcevxqfchswn@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+packages = [{include = "gpt_researcher"}]
+
 
 [tool.poetry.dependencies]
 python = ">=3.11"
@@ -62,10 +64,10 @@ asyncio_fixture_loop_scope = "function"
 gpt-researcher = { workspace = true }
 
 [project]
-name = "gpt-researcher"
-version = "0.14.5"
-description = "GPT Researcher is an autonomous agent designed for comprehensive online research on a variety of tasks."
-authors = [{ name = "Assaf Elovic", email = "assaf.elovic@gmail.com" }]
+name = "gpt-researcher-tomorrow"
+version = "0.1.0"
+description = "GPT Researcher Tomorrow - A fork of GPT Researcher, an autonomous agent for comprehensive online research on a variety of tasks."
+authors = [{ name = "maowei", email = "kcevxqfchswn@gmail.com" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.11"
