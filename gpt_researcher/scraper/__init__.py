@@ -6,7 +6,9 @@ from .browser.browser import BrowserScraper
 from .browser.nodriver_scraper import NoDriverScraper
 from .tavily_extract.tavily_extract import TavilyExtract
 from .firecrawl.firecrawl import FireCrawl
+from .hasdata.hasdata import HasDataScraper
 from .scraper import Scraper
+
 
 __all__ = [
     "BeautifulSoupScraper",
@@ -18,4 +20,6 @@ __all__ = [
     "TavilyExtract",
     "Scraper",
     "FireCrawl",
+    "HasDataScraper",
 ]
+

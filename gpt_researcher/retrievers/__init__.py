@@ -3,6 +3,7 @@ from .bing.bing import BingSearch
 from .custom.custom import CustomRetriever
 from .duckduckgo.duckduckgo import Duckduckgo
 from .google.google import GoogleSearch
+from .hasdata.hasdata import HasDataRetriever
 from .pubmed_central.pubmed_central import PubMedCentralSearch
 from .searx.searx import SearxSearch
 from .semantic_scholar.semantic_scholar import SemanticScholarSearch
@@ -12,6 +13,7 @@ from .serper.serper import SerperSearch
 from .tavily.tavily_search import TavilySearch
 from .exa.exa import ExaSearch
 from .mcp import MCPRetriever
+
 
 __all__ = [
     "TavilySearch",
@@ -27,5 +29,7 @@ __all__ = [
     "SemanticScholarSearch",
     "PubMedCentralSearch",
     "ExaSearch",
+    "HasDataRetriever",
     "MCPRetriever"
 ]
+

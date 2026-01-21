@@ -18,7 +18,9 @@ from . import (
     NoDriverScraper,
     TavilyExtract,
     FireCrawl,
+    HasDataScraper,
 )
+
 
 
 class Scraper:
@@ -176,7 +178,9 @@ class Scraper:
             "nodriver": NoDriverScraper,
             "tavily_extract": TavilyExtract,
             "firecrawl": FireCrawl,
+            "hasdata": HasDataScraper,
         }
+
 
         scraper_key = None
 
