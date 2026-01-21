@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gpt-researcher-tomorrow"
-version = "0.1.0"
+version = "0.1.1"
 description = "GPT Researcher Tomorrow - A fork of GPT Researcher, an autonomous agent for comprehensive online research on a variety of tasks."
 authors = ["maowei <kcevxqfchswn@gmail.com>"]
 license = "MIT"
@@ -65,7 +65,7 @@ gpt-researcher = { workspace = true }
 
 [project]
 name = "gpt-researcher-tomorrow"
-version = "0.1.0"
+version = "0.1.1"
 description = "GPT Researcher Tomorrow - A fork of GPT Researcher, an autonomous agent for comprehensive online research on a variety of tasks."
 authors = [{ name = "maowei", email = "kcevxqfchswn@gmail.com" }]
 license = { text = "MIT" }
