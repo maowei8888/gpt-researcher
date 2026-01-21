@@ -61,6 +61,10 @@ def get_retriever(retriever: str):
             from gpt_researcher.retrievers import CustomRetriever
 
             return CustomRetriever
+        case "hasdata":
+            from gpt_researcher.retrievers import HasDataRetriever
+
+            return HasDataRetriever
         case "mcp":
             from gpt_researcher.retrievers import MCPRetriever
 
