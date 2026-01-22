@@ -76,42 +76,111 @@ class DeepResearchSkill:
             temperature=0.4
         )
 
-        lines = response.split('\n')
+        # 添加调试日志
+        logger.debug(f"LLM 响应内容 (前 1000 字符): {response[:1000]}")
+        print(f"\n🔍 调试：LLM 原始响应:\n{'-'*60}\n{response}\n{'-'*60}\n", flush=True)
+
+        # 改进的解析逻辑 - 支持多种格式
+        import re
         queries = []
+
+        # 尝试多种解析策略
+
+        # 策略 1: 原始格式 (Query: ... Goal: ...)
+        lines = response.split('\n')
         current_query = {}
 
         for line in lines:
             line = line.strip()
-            if line.startswith('Query:'):
-                if current_query:
+            # 支持多种 Query 格式
+            if re.match(r'^(Query|查询|\*\*Query\*\*|\d+\.\s*Query)[:\s：]', line, re.IGNORECASE):
+                if current_query and 'query' in current_query:
                     queries.append(current_query)
-                current_query = {'query': line.replace('Query:', '').strip()}
-            elif line.startswith('Goal:') and current_query:
-                current_query['researchGoal'] = line.replace('Goal:', '').strip()
+                # 提取查询内容
+                query_text = re.sub(r'^(Query|查询|\*\*Query\*\*|\d+\.\s*Query)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
+                query_text = query_text.strip('*').strip()  # 移除可能的 markdown 标记
+                current_query = {'query': query_text}
+            # 支持多种 Goal 格式
+            elif re.match(r'^(Goal|目标|\*\*Goal\*\*)[:\s：]', line, re.IGNORECASE) and current_query:
+                goal_text = re.sub(r'^(Goal|目标|\*\*Goal\*\*)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
+                goal_text = goal_text.strip('*').strip()
+                current_query['researchGoal'] = goal_text
 
-        if current_query:
+        if current_query and 'query' in current_query:
             queries.append(current_query)
+
+        # 策略 2: 如果策略 1 失败，尝试提取编号列表格式
+        if not queries:
+            logger.info("策略 1 失败，尝试策略 2：提取编号列表")
+            print(f"⚠️ 策略 1 解析失败，尝试策略 2...", flush=True)
+
+            # 匹配类似 "1. xxx" 或 "1) xxx" 的格式
+            numbered_items = re.findall(r'(?:^|\n)\s*(\d+)[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|\Z)', response, re.DOTALL)
+            for num, content in numbered_items[:num_queries]:
+                # 尝试从内容中提取查询和目标
+                content_lines = content.strip().split('\n')
+                query_text = content_lines[0].strip()
+                goal_text = ' '.join(content_lines[1:]).strip() if len(content_lines) > 1 else "Research this topic"
+
+                queries.append({
+                    'query': query_text,
+                    'researchGoal': goal_text or "Research this topic"
+                })
+
+        # 策略 3: 如果仍然失败，尝试按段落分割
+        if not queries:
+            logger.info("策略 2 失败，尝试策略 3：按段落分割")
+            print(f"⚠️ 策略 2 解析失败，尝试策略 3...", flush=True)
+
+            paragraphs = [p.strip() for p in response.split('\n\n') if p.strip()]
+            for para in paragraphs[:num_queries]:
+                # 取第一句作为查询
+                sentences = para.split('.')
+                if sentences:
+                    queries.append({
+                        'query': sentences[0].strip(),
+                        'researchGoal': para[:200]  # 取前 200 字符作为目标
+                    })
+
+        # 确保所有查询都有 researchGoal
+        for q in queries:
+            if 'researchGoal' not in q or not q['researchGoal']:
+                q['researchGoal'] = f"Research: {q['query']}"
+
+        # 验证和日志
+        if not queries:
+            logger.error(f"❌ 无法从 LLM 响应中解析任何查询。完整响应: {response}")
+            print(f"❌ 错误：未能从 LLM 响应中解析出查询！", flush=True)
+            print(f"   模型: {self.researcher.cfg.strategic_llm_model}", flush=True)
+            print(f"   提供商: {self.researcher.cfg.strategic_llm_provider}", flush=True)
+        else:
+            logger.info(f"✅ 成功解析 {len(queries)} 个查询")
+            print(f"✅ 成功解析 {len(queries)} 个查询", flush=True)
+            for i, q in enumerate(queries[:num_queries], 1):
+                print(f"   {i}. 查询: {q['query'][:80]}...", flush=True)
+                print(f"      目标: {q.get('researchGoal', 'N/A')[:80]}...", flush=True)
 
         return queries[:num_queries]
 
     async def generate_research_plan(self, query: str, num_questions: int = 3) -> List[str]:
         """Generate follow-up questions to clarify research direction"""
-        # Get initial search results to inform query generation
-        # Pass the researcher so MCP retriever receives cfg and mcp_configs
-        search_results = await get_search_results(
-            query,
-            self.researcher.retrievers[0],
-            researcher=self.researcher
-        )
-        logger.info(f"Initial web knowledge obtained: {len(search_results)} results")
+        try:
+            # Get initial search results to inform query generation
+            # Pass the researcher so MCP retriever receives cfg and mcp_configs
+            search_results = await get_search_results(
+                query,
+                self.researcher.retrievers[0],
+                researcher=self.researcher
+            )
+            logger.info(f"Initial web knowledge obtained: {len(search_results)} results")
 
-        # Get current time for context
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Get current time for context
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        messages = [
-            {"role": "system", "content": "You are an expert researcher. Your task is to analyze the original query and search results, then generate targeted questions that explore different aspects and time periods of the topic."},
-            {"role": "user",
-             "content": f"""Original query: {query}
+            messages = [
+                {"role": "system", "content": "You are an expert researcher. Your task is to analyze the original query and search results, then generate targeted questions that explore different aspects and time periods of the topic."},
+                {"role": "user",
+                 "content": f"""Original query: {query}
 
 Current time: {current_time}
 
@@ -121,72 +190,151 @@ Search results:
 Based on these results, the original query, and the current time, generate {num_questions} unique questions. Each question should explore a different aspect or time period of the topic, considering recent developments up to {current_time}.
 
 Format each question on a new line starting with 'Question: '"""}
-        ]
+            ]
 
-        response = await create_chat_completion(
-            messages=messages,
-            llm_provider=self.researcher.cfg.strategic_llm_provider,
-            model=self.researcher.cfg.strategic_llm_model,
-            reasoning_effort=ReasoningEfforts.High.value,
-            temperature=0.4
-        )
+            response = await create_chat_completion(
+                messages=messages,
+                llm_provider=self.researcher.cfg.strategic_llm_provider,
+                model=self.researcher.cfg.strategic_llm_model,
+                reasoning_effort=ReasoningEfforts.High.value,
+                temperature=0.4
+            )
 
-        questions = [q.replace('Question:', '').strip()
-                     for q in response.split('\n')
-                     if q.strip().startswith('Question:')]
-        return questions[:num_questions]
+            # 添加调试日志
+            logger.debug(f"研究计划 LLM 响应 (前 500 字符): {response[:500]}")
+
+            # 改进的解析逻辑
+            import re
+            questions = []
+
+            # 策略 1: 查找 "Question:" 格式
+            for line in response.split('\n'):
+                line = line.strip()
+                if re.match(r'^(Question|问题|\*\*Question\*\*|\d+\.\s*Question)[:\s：]', line, re.IGNORECASE):
+                    question_text = re.sub(r'^(Question|问题|\*\*Question\*\*|\d+\.\s*Question)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
+                    question_text = question_text.strip('*').strip()
+                    if question_text:
+                        questions.append(question_text)
+
+            # 策略 2: 如果没有找到，尝试提取编号列表
+            if not questions:
+                logger.info("研究计划策略 1 失败，尝试策略 2")
+                numbered_items = re.findall(r'(?:^|\n)\s*(\d+)[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|\Z)', response, re.DOTALL)
+                for num, content in numbered_items[:num_questions]:
+                    question_text = content.strip().split('\n')[0].strip()
+                    if question_text:
+                        questions.append(question_text)
+
+            # 验证
+            if not questions:
+                logger.warning(f"无法从响应中解析问题，使用默认问题。响应: {response[:200]}")
+                questions = [
+                    f"What are the key aspects of {query}?",
+                    f"What are recent developments in {query}?",
+                    f"What are the implications of {query}?"
+                ]
+            else:
+                logger.info(f"✅ 成功生成 {len(questions)} 个研究问题")
+
+            return questions[:num_questions]
+
+        except Exception as e:
+            logger.error(f"生成研究计划时出错: {str(e)}", exc_info=True)
+            print(f"⚠️ 生成研究计划失败，使用默认问题: {str(e)}", flush=True)
+            # 返回默认问题
+            return [
+                f"What are the key aspects of {query}?",
+                f"What are recent developments in {query}?",
+                f"What are the implications of {query}?"
+            ][:num_questions]
 
     async def process_research_results(self, query: str, context: str, num_learnings: int = 3) -> Dict[str, List[str]]:
         """Process research results to extract learnings and follow-up questions"""
-        messages = [
-            {"role": "system", "content": "You are an expert researcher analyzing search results."},
-            {"role": "user",
-             "content": f"Given the following research results for the query '{query}', extract key learnings and suggest follow-up questions. For each learning, include a citation to the source URL if available. Format each learning as 'Learning [source_url]: <insight>' and each question as 'Question: <question>':\n\n{context}"}
-        ]
+        try:
+            messages = [
+                {"role": "system", "content": "You are an expert researcher analyzing search results."},
+                {"role": "user",
+                 "content": f"Given the following research results for the query '{query}', extract key learnings and suggest follow-up questions. For each learning, include a citation to the source URL if available. Format each learning as 'Learning [source_url]: <insight>' and each question as 'Question: <question>':\n\n{context}"}
+            ]
 
-        response = await create_chat_completion(
-            messages=messages,
-            llm_provider=self.researcher.cfg.strategic_llm_provider,
-            model=self.researcher.cfg.strategic_llm_model,
-            temperature=0.4,
-            reasoning_effort=ReasoningEfforts.High.value,
-            max_tokens=1000
-        )
+            response = await create_chat_completion(
+                messages=messages,
+                llm_provider=self.researcher.cfg.strategic_llm_provider,
+                model=self.researcher.cfg.strategic_llm_model,
+                temperature=0.4,
+                reasoning_effort=ReasoningEfforts.High.value,
+                max_tokens=1000
+            )
 
-        lines = response.split('\n')
-        learnings = []
-        questions = []
-        citations = {}
+            # 添加调试日志
+            logger.debug(f"处理研究结果 LLM 响应 (前 500 字符): {response[:500]}")
 
-        for line in lines:
-            line = line.strip()
-            if line.startswith('Learning'):
-                import re
-                url_match = re.search(r'\[(.*?)\]:', line)
-                if url_match:
-                    url = url_match.group(1)
-                    learning = line.split(':', 1)[1].strip()
-                    learnings.append(learning)
-                    citations[learning] = url
-                else:
-                    # Try to find URL in the line itself
-                    url_match = re.search(
-                        r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', line)
+            lines = response.split('\n')
+            learnings = []
+            questions = []
+            citations = {}
+
+            import re
+            for line in lines:
+                line = line.strip()
+                # 解析 Learning
+                if re.match(r'^(Learning|学习|\*\*Learning\*\*)', line, re.IGNORECASE):
+                    url_match = re.search(r'\[(.*?)\]:', line)
                     if url_match:
-                        url = url_match.group(0)
-                        learning = line.replace(url, '').replace('Learning:', '').strip()
+                        url = url_match.group(1)
+                        learning = line.split(':', 1)[1].strip() if ':' in line else line
                         learnings.append(learning)
                         citations[learning] = url
                     else:
-                        learnings.append(line.replace('Learning:', '').strip())
-            elif line.startswith('Question:'):
-                questions.append(line.replace('Question:', '').strip())
+                        # Try to find URL in the line itself
+                        url_match = re.search(
+                            r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', line)
+                        if url_match:
+                            url = url_match.group(0)
+                            learning = line.replace(url, '').replace('Learning:', '').strip()
+                            learning = re.sub(r'^(Learning|学习|\*\*Learning\*\*)[:\s：]+', '', learning, flags=re.IGNORECASE).strip()
+                            learnings.append(learning)
+                            citations[learning] = url
+                        else:
+                            learning = re.sub(r'^(Learning|学习|\*\*Learning\*\*)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
+                            learnings.append(learning)
+                # 解析 Question
+                elif re.match(r'^(Question|问题|\*\*Question\*\*)', line, re.IGNORECASE):
+                    question = re.sub(r'^(Question|问题|\*\*Question\*\*)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
+                    questions.append(question)
 
-        return {
-            'learnings': learnings[:num_learnings],
-            'followUpQuestions': questions[:num_learnings],
-            'citations': citations
-        }
+            # 验证和默认值
+            if not learnings:
+                logger.warning(f"未能从响应中提取学习内容，使用上下文摘要")
+                # 使用上下文的前几句作为学习内容
+                context_sentences = context.split('.')[:num_learnings]
+                learnings = [s.strip() for s in context_sentences if s.strip()]
+
+            if not questions:
+                logger.warning(f"未能从响应中提取后续问题，生成默认问题")
+                questions = [
+                    f"What are the implications of these findings about {query}?",
+                    f"What additional research is needed on {query}?",
+                    f"How does this relate to broader trends in {query}?"
+                ]
+
+            logger.info(f"✅ 提取了 {len(learnings)} 个学习内容和 {len(questions)} 个后续问题")
+
+            return {
+                'learnings': learnings[:num_learnings],
+                'followUpQuestions': questions[:num_learnings],
+                'citations': citations
+            }
+
+        except Exception as e:
+            logger.error(f"处理研究结果时出错: {str(e)}", exc_info=True)
+            print(f"⚠️ 处理研究结果失败: {str(e)}", flush=True)
+            # 返回基本结果
+            return {
+                'learnings': [context[:200]] if context else ["No learnings extracted"],
+                'followUpQuestions': [f"What more can we learn about {query}?"],
+                'citations': {}
+            }
 
     async def deep_research(
             self,
@@ -214,8 +362,39 @@ Format each question on a new line starting with 'Question: '"""}
 
         # Generate search queries
         print(f"🔎 Generating {breadth} search queries...", flush=True)
-        serp_queries = await self.generate_search_queries(query, num_queries=breadth)
+        try:
+            serp_queries = await self.generate_search_queries(query, num_queries=breadth)
+        except Exception as e:
+            logger.error(f"生成搜索查询时出错: {str(e)}", exc_info=True)
+            print(f"❌ 生成搜索查询失败: {str(e)}", flush=True)
+            # 返回空结果而不是崩溃
+            return {
+                'learnings': [],
+                'visited_urls': [],
+                'citations': {},
+                'context': [],
+                'sources': []
+            }
+
         print(f"✅ Generated {len(serp_queries)} queries: {[q['query'] for q in serp_queries]}", flush=True)
+
+        # 验证查询结果
+        if not serp_queries:
+            logger.error(f"❌ 未能生成任何搜索查询！query={query[:100]}")
+            print(f"❌ 错误：未能生成搜索查询，无法继续研究", flush=True)
+            print(f"   请检查：", flush=True)
+            print(f"   1. LLM 模型配置是否正确", flush=True)
+            print(f"   2. API 密钥是否有效", flush=True)
+            print(f"   3. 模型是否支持当前的提示格式", flush=True)
+            # 返回空结果
+            return {
+                'learnings': [],
+                'visited_urls': [],
+                'citations': {},
+                'context': [],
+                'sources': []
+            }
+
         progress.total_queries = len(serp_queries)
 
         all_learnings = learnings.copy()

@@ -57,8 +57,8 @@ class HasDataService:
     WEB_SCRAPE_URL = "https://api.hasdata.com/scrape/web"
     TIMEOUT_SECONDS = 300
 
-    # 信号量控制并发
-    _semaphore: Optional[asyncio.Semaphore] = None
+    # 信号量控制并发 - 使用字典存储每个事件循环的信号量
+    _semaphores: Dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
     MAX_CONCURRENT = 13
 
     def __init__(self):
@@ -70,10 +70,18 @@ class HasDataService:
 
     @classmethod
     def _get_semaphore(cls) -> asyncio.Semaphore:
-        """获取信号量（懒加载）"""
-        if cls._semaphore is None:
-            cls._semaphore = asyncio.Semaphore(cls.MAX_CONCURRENT)
-        return cls._semaphore
+        """获取当前事件循环的信号量（懒加载）"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # 如果没有运行中的事件循环，创建一个新的信号量
+            return asyncio.Semaphore(cls.MAX_CONCURRENT)
+
+        # 为每个事件循环创建独立的信号量
+        if loop not in cls._semaphores:
+            cls._semaphores[loop] = asyncio.Semaphore(cls.MAX_CONCURRENT)
+
+        return cls._semaphores[loop]
 
     def _get_headers(self) -> Dict[str, str]:
         """获取请求头"""
