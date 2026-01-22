@@ -52,7 +52,7 @@ async def create_chat_completion(
     # validate input
     if model is None:
         raise ValueError("Model cannot be None")
-    if max_tokens is not None and max_tokens > 32001:
+    if max_tokens is not None and max_tokens > 128000:
         raise ValueError(
             f"Max tokens cannot be more than 32,000, but got {max_tokens}")
 
