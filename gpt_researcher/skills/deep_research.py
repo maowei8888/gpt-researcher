@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 # Maximum words allowed in context (25k words for safety margin)
 MAX_CONTEXT_WORDS = 25000
 
+
 def count_words(text: str) -> int:
     """Count words in a text string"""
     return len(text.split())
+
 
 def trim_context_to_word_limit(context_list: List[str], max_words: int = MAX_CONTEXT_WORDS) -> List[str]:
     """Trim context list to stay within word limit while preserving most recent/relevant items"""
@@ -33,6 +35,7 @@ def trim_context_to_word_limit(context_list: List[str], max_words: int = MAX_CON
             break
 
     return trimmed_context
+
 
 class ResearchProgress:
     def __init__(self, total_depth: int, total_breadth: int):
@@ -78,7 +81,7 @@ class DeepResearchSkill:
 
         # 添加调试日志
         logger.debug(f"LLM 响应内容 (前 1000 字符): {response[:1000]}")
-        print(f"\n🔍 调试：LLM 原始响应:\n{'-'*60}\n{response}\n{'-'*60}\n", flush=True)
+        print(f"\n🔍 调试：LLM 原始响应:\n{'-' * 60}\n{response}\n{'-' * 60}\n", flush=True)
 
         # 改进的解析逻辑 - 支持多种格式
         import re
@@ -97,7 +100,8 @@ class DeepResearchSkill:
                 if current_query and 'query' in current_query:
                     queries.append(current_query)
                 # 提取查询内容
-                query_text = re.sub(r'^(Query|查询|\*\*Query\*\*|\d+\.\s*Query)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
+                query_text = re.sub(r'^(Query|查询|\*\*Query\*\*|\d+\.\s*Query)[:\s：]+', '', line,
+                                    flags=re.IGNORECASE).strip()
                 query_text = query_text.strip('*').strip()  # 移除可能的 markdown 标记
                 current_query = {'query': query_text}
             # 支持多种 Goal 格式
@@ -178,7 +182,8 @@ class DeepResearchSkill:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             messages = [
-                {"role": "system", "content": "You are an expert researcher. Your task is to analyze the original query and search results, then generate targeted questions that explore different aspects and time periods of the topic."},
+                {"role": "system",
+                 "content": "You are an expert researcher. Your task is to analyze the original query and search results, then generate targeted questions that explore different aspects and time periods of the topic."},
                 {"role": "user",
                  "content": f"""Original query: {query}
 
@@ -211,7 +216,8 @@ Format each question on a new line starting with 'Question: '"""}
             for line in response.split('\n'):
                 line = line.strip()
                 if re.match(r'^(Question|问题|\*\*Question\*\*|\d+\.\s*Question)[:\s：]', line, re.IGNORECASE):
-                    question_text = re.sub(r'^(Question|问题|\*\*Question\*\*|\d+\.\s*Question)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
+                    question_text = re.sub(r'^(Question|问题|\*\*Question\*\*|\d+\.\s*Question)[:\s：]+', '', line,
+                                           flags=re.IGNORECASE).strip()
                     question_text = question_text.strip('*').strip()
                     if question_text:
                         questions.append(question_text)
@@ -252,9 +258,31 @@ Format each question on a new line starting with 'Question: '"""}
         """Process research results to extract learnings and follow-up questions"""
         try:
             messages = [
-                {"role": "system", "content": "You are an expert researcher analyzing search results."},
+                {"role": "system",
+                 "content": "You are an expert researcher analyzing search results. You MUST format your response exactly as specified."},
                 {"role": "user",
-                 "content": f"Given the following research results for the query '{query}', extract key learnings and suggest follow-up questions. For each learning, include a citation to the source URL if available. Format each learning as 'Learning [source_url]: <insight>' and each question as 'Question: <question>':\n\n{context}"}
+                 "content": f"""Given the following research results for the query '{query}', extract {num_learnings} key learnings and suggest {num_learnings} follow-up questions.
+
+IMPORTANT - Your response MUST follow this EXACT format:
+
+Learning: <first key insight from the research>
+Learning: <second key insight from the research>
+Learning: <third key insight from the research>
+
+Question: <first follow-up question to explore further>
+Question: <second follow-up question to explore further>
+Question: <third follow-up question to explore further>
+
+Rules:
+1. Start each learning with "Learning:" (no numbers, no bullets, no markdown)
+2. Start each question with "Question:" (no numbers, no bullets, no markdown)
+3. Each item should be on its own line
+4. Do not use "1.", "2.", "*", "-", or any other formatting
+5. Keep learnings concise and factual
+6. Make questions specific and actionable
+
+Research results:
+{context}"""}
             ]
 
             response = await create_chat_completion(
@@ -268,6 +296,7 @@ Format each question on a new line starting with 'Question: '"""}
 
             # 添加调试日志
             logger.debug(f"处理研究结果 LLM 响应 (前 500 字符): {response[:500]}")
+            print(f"\n📝 调试：处理研究结果的完整LLM响应:\n{'-' * 60}\n{response}\n{'-' * 60}\n", flush=True)
 
             lines = response.split('\n')
             learnings = []
@@ -275,10 +304,12 @@ Format each question on a new line starting with 'Question: '"""}
             citations = {}
 
             import re
+
+            # 策略 1: 标准格式解析 (Learning: ... / Question: ...)
             for line in lines:
                 line = line.strip()
                 # 解析 Learning
-                if re.match(r'^(Learning|学习|\*\*Learning\*\*)', line, re.IGNORECASE):
+                if re.match(r'^(Learning|学习|\*\*Learning\*\*|\d+\.\s*Learning)', line, re.IGNORECASE):
                     url_match = re.search(r'\[(.*?)\]:', line)
                     if url_match:
                         url = url_match.group(1)
@@ -292,33 +323,97 @@ Format each question on a new line starting with 'Question: '"""}
                         if url_match:
                             url = url_match.group(0)
                             learning = line.replace(url, '').replace('Learning:', '').strip()
-                            learning = re.sub(r'^(Learning|学习|\*\*Learning\*\*)[:\s：]+', '', learning, flags=re.IGNORECASE).strip()
+                            learning = re.sub(r'^(Learning|学习|\*\*Learning\*\*|\d+\.\s*Learning)[:\s：]+', '',
+                                              learning, flags=re.IGNORECASE).strip()
                             learnings.append(learning)
                             citations[learning] = url
                         else:
-                            learning = re.sub(r'^(Learning|学习|\*\*Learning\*\*)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
-                            learnings.append(learning)
+                            learning = re.sub(r'^(Learning|学习|\*\*Learning\*\*|\d+\.\s*Learning)[:\s：]+', '', line,
+                                              flags=re.IGNORECASE).strip()
+                            if learning:
+                                learnings.append(learning)
                 # 解析 Question
-                elif re.match(r'^(Question|问题|\*\*Question\*\*)', line, re.IGNORECASE):
-                    question = re.sub(r'^(Question|问题|\*\*Question\*\*)[:\s：]+', '', line, flags=re.IGNORECASE).strip()
-                    questions.append(question)
+                elif re.match(r'^(Question|问题|\*\*Question\*\*|\d+\.\s*Question)', line, re.IGNORECASE):
+                    question = re.sub(r'^(Question|问题|\*\*Question\*\*|\d+\.\s*Question)[:\s：]+', '', line,
+                                      flags=re.IGNORECASE).strip()
+                    if question:
+                        questions.append(question)
 
-            # 验证和默认值
+            # 策略 2: 如果策略 1 失败，尝试提取编号列表格式
+            if not learnings and not questions:
+                logger.info("处理研究结果策略 1 失败，尝试策略 2：提取编号列表")
+                print(f"⚠️ 处理研究结果策略 1 解析失败，尝试策略 2...", flush=True)
+
+                # 尝试匹配编号列表
+                numbered_items = re.findall(r'(?:^|\n)\s*(\d+)[\.\)]\s*(.+?)(?=\n\s*\d+[\.\)]|\Z)', response, re.DOTALL)
+
+                # 前半部分作为 learnings，后半部分作为 questions
+                mid_point = len(numbered_items) // 2
+                for num, content in numbered_items[:mid_point]:
+                    learning_text = content.strip().split('\n')[0].strip()
+                    if learning_text:
+                        learnings.append(learning_text)
+
+                for num, content in numbered_items[mid_point:]:
+                    question_text = content.strip().split('\n')[0].strip()
+                    if question_text:
+                        questions.append(question_text)
+
+            # 策略 3: 如果仍然失败，尝试按段落分割
+            if not learnings and not questions:
+                logger.info("处理研究结果策略 2 失败，尝试策略 3：按段落分割")
+                print(f"⚠️ 处理研究结果策略 2 解析失败，尝试策略 3...", flush=True)
+
+                paragraphs = [p.strip() for p in response.split('\n\n') if p.strip()]
+
+                # 前半部分作为 learnings
+                mid_point = len(paragraphs) // 2
+                for para in paragraphs[:mid_point]:
+                    sentences = para.split('.')
+                    if sentences:
+                        learning_text = sentences[0].strip()
+                        if learning_text:
+                            learnings.append(learning_text)
+
+                # 后半部分作为 questions
+                for para in paragraphs[mid_point:]:
+                    sentences = para.split('.')
+                    if sentences:
+                        question_text = sentences[0].strip()
+                        if question_text:
+                            questions.append(question_text)
+
+            # 策略 4: 如果还是失败，尝试按句子分割
             if not learnings:
-                logger.warning(f"未能从响应中提取学习内容，使用上下文摘要")
+                logger.info("处理研究结果策略 3 失败，尝试策略 4：按句子分割提取学习内容")
+                print(f"⚠️ 处理研究结果策略 3 解析失败，尝试策略 4（学习内容）...", flush=True)
+
                 # 使用上下文的前几句作为学习内容
-                context_sentences = context.split('.')[:num_learnings]
-                learnings = [s.strip() for s in context_sentences if s.strip()]
+                context_sentences = context.split('.')[:num_learnings * 2]
+                for s in context_sentences:
+                    s = s.strip()
+                    if s and len(s) > 20:  # 只保留有意义的句子
+                        learnings.append(s)
+                        if len(learnings) >= num_learnings:
+                            break
 
             if not questions:
-                logger.warning(f"未能从响应中提取后续问题，生成默认问题")
+                logger.info("生成默认后续问题")
+                print(f"⚠️ 无法提取后续问题，生成默认问题", flush=True)
                 questions = [
                     f"What are the implications of these findings about {query}?",
                     f"What additional research is needed on {query}?",
                     f"How does this relate to broader trends in {query}?"
                 ]
 
+            # 最终验证
+            if not learnings:
+                logger.warning(f"所有策略失败，使用上下文摘要作为学习内容")
+                print(f"⚠️ 所有策略失败，使用上下文摘要", flush=True)
+                learnings = [context[:200]] if context else ["No learnings extracted from research"]
+
             logger.info(f"✅ 提取了 {len(learnings)} 个学习内容和 {len(questions)} 个后续问题")
+            print(f"✅ 成功提取 {len(learnings)} 个学习内容和 {len(questions)} 个后续问题", flush=True)
 
             return {
                 'learnings': learnings[:num_learnings],
@@ -521,7 +616,8 @@ Format each question on a new line starting with 'Question: '"""}
 
         # Trim context to stay within word limits
         trimmed_context = trim_context_to_word_limit(all_context)
-        logger.info(f"Trimmed context from {len(all_context)} items to {len(trimmed_context)} items to stay within word limit")
+        logger.info(
+            f"Trimmed context from {len(all_context)} items to {len(trimmed_context)} items to stay within word limit")
 
         return {
             'learnings': list(set(all_learnings)),
@@ -533,7 +629,9 @@ Format each question on a new line starting with 'Question: '"""}
 
     async def run(self, on_progress=None) -> str:
         """Run the deep research process and generate final report"""
-        print(f"\n🔍 DEEP RESEARCH: Starting with breadth={self.breadth}, depth={self.depth}, concurrency={self.concurrency_limit}", flush=True)
+        print(
+            f"\n🔍 DEEP RESEARCH: Starting with breadth={self.breadth}, depth={self.depth}, concurrency={self.concurrency_limit}",
+            flush=True)
         start_time = time.time()
 
         # Log initial costs
@@ -579,7 +677,7 @@ Format each question on a new line starting with 'Question: '"""}
 
         # Trim final context to word limit
         final_context = trim_context_to_word_limit(context_with_citations)
-        
+
         # Set enhanced context and visited URLs
         self.researcher.context = "\n".join(final_context)
         self.researcher.visited_urls = results['visited_urls']

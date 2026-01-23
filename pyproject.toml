@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gpt-researcher-tomorrow"
-version = "0.1.4"
+version = "0.1.5"
 description = "GPT Researcher Tomorrow - A fork of GPT Researcher, an autonomous agent for comprehensive online research on a variety of tasks."
 authors = ["maowei <kcevxqfchswn@gmail.com>"]
 license = "MIT"
@@ -28,7 +28,7 @@ langchain-openai = "^1.0.0"
 langchain-text-splitters = "^1.0.0"
 langgraph = ">=0.2.73,<0.3"
 loguru = "^0.7.2"
-lxml = { version = ">=4.9.2", extras = ["html_clean"] }
+lxml = { version = "0.1.5", extras = ["html_clean"] }
 markdown = ">=3.5.1"
 md2pdf = ">=1.0.1"
 mistune = "^3.0.2"
@@ -46,7 +46,7 @@ unstructured = ">=0.13"
 uvicorn = ">=0.24.0.post1"
 websockets = "^13.1"
 # Model Context Protocol support
-mcp = { version = ">=1.0.0", markers = "platform_system != 'Windows'" }
+mcp = { version = "0.1.4", markers = "platform_system != 'Windows'" }
 langchain-mcp-adapters = ">=0.1.0"
 
 [build-system]
