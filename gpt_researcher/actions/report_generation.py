@@ -244,6 +244,18 @@ async def generate_report(
         report:
 
     """
+    import time
+
+    start_time = time.time()
+    logger.info(f"========== generate_report 开始 ==========")
+    logger.info(f"📋 报告配置:")
+    logger.info(f"   - 报告类型: {report_type}")
+    logger.info(f"   - 目标字数: {cfg.total_words}")
+    logger.info(f"   - 语气: {tone}")
+    logger.info(f"   - Context长度: {len(str(context))} 字符")
+
+    # Step 1: 生成 prompt
+    prompt_start = time.time()
     generate_prompt = get_prompt_by_report_type(report_type, prompt_family)
     report = ""
 
@@ -253,6 +265,20 @@ async def generate_report(
         content = f"{custom_prompt}\n\nContext: {context}"
     else:
         content = f"{generate_prompt(query, context, report_source, report_format=cfg.report_format, tone=tone, total_words=cfg.total_words, language=cfg.language)}"
+
+    prompt_duration = time.time() - prompt_start
+    content_length = len(content)
+    logger.info(f"✅ 步骤1: Prompt生成完成，耗时: {prompt_duration:.2f}秒")
+    logger.info(f"   - Prompt长度: {content_length} 字符")
+
+    # Step 2: 调用 LLM
+    logger.info(f"🤖 步骤2: 开始调用 LLM (create_chat_completion)...")
+    logger.info(f"   - 模型: {cfg.smart_llm_model}")
+    logger.info(f"   - Provider: {cfg.smart_llm_provider}")
+    logger.info(f"   - Max Tokens: {cfg.smart_token_limit}")
+    logger.info(f"   - Temperature: 0.35")
+
+    llm_start = time.time()
     try:
         report = await create_chat_completion(
             model=cfg.smart_llm_model,
@@ -269,8 +295,14 @@ async def generate_report(
             cost_callback=cost_callback,
             **kwargs
         )
+        llm_duration = time.time() - llm_start
+        logger.info(f"✅ 步骤2: LLM调用成功，耗时: {llm_duration:.2f}秒 ({llm_duration/60:.2f}分钟)")
+        logger.info(f"   - 生成内容长度: {len(report)} 字符")
+        logger.info(f"   - 生成速度: {len(report)/llm_duration:.1f} 字符/秒")
     except:
+        logger.warning(f"⚠️ 第一次LLM调用失败，尝试备用方案...")
         try:
+            fallback_start = time.time()
             report = await create_chat_completion(
                 model=cfg.smart_llm_model,
                 messages=[
@@ -285,7 +317,19 @@ async def generate_report(
                 cost_callback=cost_callback,
                 **kwargs
             )
+            fallback_duration = time.time() - fallback_start
+            llm_duration = time.time() - llm_start
+            logger.info(f"✅ 步骤2: LLM备用方案成功，耗时: {fallback_duration:.2f}秒")
+            logger.info(f"   - 总LLM耗时（含重试）: {llm_duration:.2f}秒")
         except Exception as e:
-            print(f"Error in generate_report: {e}")
+            llm_duration = time.time() - llm_start
+            logger.error(f"❌ 步骤2: LLM调用失败，耗时: {llm_duration:.2f}秒")
+            logger.error(f"Error in generate_report: {e}")
+
+    total_duration = time.time() - start_time
+    logger.info(f"========== generate_report 完成 ==========")
+    logger.info(f"总耗时: {total_duration:.2f}秒 ({total_duration/60:.2f}分钟)")
+    logger.info(f"  - Prompt生成: {prompt_duration:.2f}秒 ({prompt_duration/total_duration*100:.1f}%)")
+    logger.info(f"  - LLM调用: {llm_duration:.2f}秒 ({llm_duration/total_duration*100:.1f}%) ⚠️")
 
     return report

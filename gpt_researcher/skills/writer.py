@@ -40,7 +40,15 @@ class ReportGenerator:
         Returns:
             str: The generated report.
         """
+        import time
+        import logging
+        logger = logging.getLogger('research')
+
+        start_time = time.time()
+        logger.info(f"========== write_report 开始 ==========")
+
         # send the selected images prior to writing report
+        image_start = time.time()
         research_images = self.researcher.get_research_images()
         if research_images:
             await stream_output(
@@ -51,8 +59,15 @@ class ReportGenerator:
                 True,
                 research_images
             )
+        image_duration = time.time() - image_start
+        logger.info(f"✅ 图片处理完成，耗时: {image_duration:.2f}秒, 图片数量: {len(research_images)}")
 
         context = ext_context or self.researcher.context
+        context_length = len(str(context))
+        logger.info(f"📊 Context 信息:")
+        logger.info(f"   - Context 长度: {context_length} 字符")
+        logger.info(f"   - Context 来源: {'外部' if ext_context else '内部'}")
+
         if self.researcher.verbose:
             await stream_output(
                 "logs",
@@ -61,6 +76,7 @@ class ReportGenerator:
                 self.researcher.websocket,
             )
 
+        prep_start = time.time()
         report_params = self.research_params.copy()
         report_params["context"] = context
         report_params["custom_prompt"] = custom_prompt
@@ -74,8 +90,22 @@ class ReportGenerator:
             })
         else:
             report_params["cost_callback"] = self.researcher.add_costs
+        prep_duration = time.time() - prep_start
+        logger.info(f"✅ 参数准备完成，耗时: {prep_duration:.2f}秒")
 
+        logger.info(f"🤖 开始调用 LLM 生成报告...")
+        logger.info(f"   - 模型: {self.researcher.cfg.smart_llm_model}")
+        logger.info(f"   - Token限制: {self.researcher.cfg.smart_token_limit}")
+        logger.info(f"   - 目标字数: {self.researcher.cfg.total_words}")
+
+        llm_start = time.time()
         report = await generate_report(**report_params, **self.researcher.kwargs)
+        llm_duration = time.time() - llm_start
+
+        report_length = len(report)
+        logger.info(f"✅ LLM 生成完成，耗时: {llm_duration:.2f}秒 ({llm_duration/60:.2f}分钟)")
+        logger.info(f"   - 生成报告长度: {report_length} 字符")
+        logger.info(f"   - 生成速度: {report_length/llm_duration:.1f} 字符/秒")
 
         if self.researcher.verbose:
             await stream_output(
@@ -84,6 +114,13 @@ class ReportGenerator:
                 f"📝 Report written for '{self.researcher.query}'",
                 self.researcher.websocket,
             )
+
+        total_duration = time.time() - start_time
+        logger.info(f"========== write_report 完成 ==========")
+        logger.info(f"总耗时: {total_duration:.2f}秒 ({total_duration/60:.2f}分钟)")
+        logger.info(f"  - 图片处理: {image_duration:.2f}秒")
+        logger.info(f"  - 参数准备: {prep_duration:.2f}秒")
+        logger.info(f"  - LLM生成: {llm_duration:.2f}秒 ({llm_duration/total_duration*100:.1f}%) ⚠️")
 
         return report
 
