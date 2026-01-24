@@ -37,6 +37,23 @@ class BrowserManager:
             urls, self.researcher.cfg, self.worker_pool
         )
         self.researcher.add_research_sources(scraped_content)
+
+        # 为每个成功抓取的页面发送单独的 scraping 事件
+        if self.researcher.verbose:
+            for item in scraped_content:
+                if item.get('raw_content'):
+                    await stream_output(
+                        "scraping",
+                        item.get('url', ''),
+                        item.get('raw_content', '')[:200],  # 发送前200个字符作为预览
+                        self.researcher.websocket,
+                        True,
+                        {
+                            "url": item.get('url', ''),
+                            "title": item.get('title', ''),
+                        }
+                    )
+
         new_images = self.select_top_images(images, k=4)  # Select top 4 images
         self.researcher.add_research_images(new_images)
 
