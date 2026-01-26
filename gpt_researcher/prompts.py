@@ -341,24 +341,10 @@ The response MUST not contain any markdown format or additional text (like ```js
         Returns:
             str: The deep research report prompt
         """
-        reference_prompt = ""
-        if report_source == ReportSource.Web.value:
-            reference_prompt = f"""
-You MUST write all used source urls at the end of the report as references, and make sure to not add duplicated sources, but only one reference for each.
-Every url should be hyperlinked: [url website](url)
-Additionally, you MUST include hyperlinks to the relevant URLs wherever they are referenced in the report:
-
-eg: Author, A. A. (Year, Month Date). Title of web page. Website Name. [url website](url)
-"""
-        else:
-            reference_prompt = f"""
-You MUST write all used source document names at the end of the report as references, and make sure to not add duplicated sources, but only one reference for each."
-"""
-
         tone_prompt = f"Write the report in a {tone.value} tone." if tone else ""
 
         return f"""
-Using the following hierarchically researched information and citations:
+Using the following hierarchically researched information:
 
 "{context}"
 
@@ -368,11 +354,10 @@ The report should:
 1. Synthesize information from multiple levels of research depth
 2. Integrate findings from various research branches
 3. Present a coherent narrative that builds from foundational to advanced insights
-4. Maintain proper citation of sources throughout
-5. Be well-structured with clear sections and subsections
-6. Have a minimum length of {total_words} words
-7. Follow {report_format} format with markdown syntax
-8. Use markdown tables, lists and other formatting features when presenting comparative data, statistics, or structured information
+4. Be well-structured with clear sections and subsections
+5. Have a minimum length of {total_words} words
+6. Follow {report_format} format with markdown syntax
+7. Use markdown tables, lists and other formatting features when presenting comparative data, statistics, or structured information
 
 Additional requirements:
 - Prioritize insights that emerged from deeper levels of research
@@ -381,11 +366,8 @@ Additional requirements:
 - You MUST determine your own concrete and valid opinion based on the given information. Do NOT defer to general and meaningless conclusions.
 - You MUST prioritize the relevance, reliability, and significance of the sources you use. Choose trusted sources over less reliable ones.
 - You must also prioritize new articles over older articles if the source can be trusted.
-- Use in-text citation references in {report_format} format and make it with markdown hyperlink placed at the end of the sentence or paragraph that references them like this: ([in-text citation](url)).
 - {tone_prompt}
 - Write in {language}
-
-{reference_prompt}
 
 Please write a thorough, well-researched report that synthesizes all the gathered information into a cohesive whole.
 Assume the current date is {datetime.now(timezone.utc).strftime('%B %d, %Y')}.
